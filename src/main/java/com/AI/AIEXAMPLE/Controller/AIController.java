@@ -68,10 +68,14 @@ public class AIController {
     @GetMapping("/overview")
     public String yoo(@RequestParam String company)
     {
-        var system = new SystemMessage("Limit it to almost 30 words and dont use *");
-        var user = new UserMessage("Give a over view of company "+company);
+        List<Document> documents = vectorStore.similaritySearch(SearchRequest.query(company).withTopK(2));
+        List<String> strings = documents.stream().map(Document::getContent).toList();
+        PromptTemplate template = new PromptTemplate(ragPromptTemplate);
+        String message ="Limit it to almost 30 words and dont use *" + " Give a over view of company "+company;
+        template.add("input",message);
+        template.add("documents" ,String.join("\n",strings));
 
-        Prompt prompt = new Prompt(List.of(system,user));
+        Prompt prompt = template.create();
         return chatClient.prompt(prompt).call().content();
     }
 
@@ -117,15 +121,18 @@ public class AIController {
     @GetMapping("/profile")
     public Profile profile(@RequestParam String company)
     {
-        String message = """
-                get details about {company} in {format}
-                """;
-        PromptTemplate promptTemplate = new PromptTemplate(message);
+        List<Document> documents = vectorStore.similaritySearch(SearchRequest.query(company).withTopK(2));
+        List<String> strings = documents.stream().map(Document::getContent).toList();
+
+
         BeanOutputConverter<Profile> beanOutputConverter = new BeanOutputConverter<>(Profile.class);
-
         String format = beanOutputConverter.getFormat();
+        String message = "get details about "+company+" in "+format;
+        PromptTemplate promptTemplate = new PromptTemplate(ragPromptTemplate);
+        promptTemplate.add("input",message);
+        promptTemplate.add("documents" ,String.join("\n",strings));
 
-        Prompt prompt = promptTemplate.create(Map.of("company", company, "format",format));
+        Prompt prompt = promptTemplate.create();
 
         Generation generation = chatClient.prompt(prompt).call().chatResponse().getResult();
 
